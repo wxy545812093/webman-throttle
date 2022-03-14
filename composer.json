@@ -1,0 +1,24 @@
+{
+  "name": "vipkwd/webman-throttle",
+  "description": "webman框架限流中间件",
+  "type": "library",
+  "homepage": "https://www.vipkwd.com",
+  "authors": [
+    {
+        "name": "vipkwd",
+        "email": "service@vipkwd.com"
+    }
+  ],
+  "keywords": ["vipkwd", "webman", "middleware", "throttle", "php"],
+  "license": "MIT",
+  "require": {
+    "php": ">=7.4",
+    "workerman/webman-framework": "^1.2.1"
+  },
+  "minimum-stability": "dev",
+  "autoload": {
+    "psr-4": {
+      "Vipkwd\\WebmanMiddleware\\": "src"
+    }
+  }
+}
