@@ -9,7 +9,7 @@ class Install
      * @var array
      */
     protected static $pathRelation = array (
-        'config/plugin/vipkwd/webman-middleware-throttle' => 'config/plugin/vipkwd/webman-middleware-throttle',
+        'config/plugin/vipkwd/webman-throttle' => 'config/plugin/vipkwd/webman-throttle',
     );
 
     /**
