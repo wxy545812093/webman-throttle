@@ -240,6 +240,13 @@ Route::any('/v1/api/user/assets',[app\api\controller\User:class, 'assets'])->mid
 ...
 ```
 
+## 更新日志：
+   v1.1.0: 增加路由自定义限流策略
+   
+   v1.0.1: 初始版本([webman](https://www.workerman.net/webman)下实现 [think-throttle](https://github.com/top-think/think-throttle) 的限流策略)
+  
+
+
 ## 注意：
 
 1、截至(Webman 1.2.5, Webman-framework v1.2.7) 不支持路由中间件默认传参
