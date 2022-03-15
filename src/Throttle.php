@@ -16,6 +16,7 @@ use Vipkwd\WebmanMiddleware\ThrottleCore\{CounterFixed, ThrottleAbstract};
 use Webman\Config;
 use support\{Container, Cache, Request, Response};
 use function sprintf;
+// use \Vipkwd\Utils\{Dev};
 
 /**
  * 访问频率限制中间件
@@ -28,13 +29,14 @@ class Throttle {
      * @var array
      */
     public static $default_config = [
+        'routes_rate' => [],
         'prefix' => 'throttle_',                    // 缓存键前缀，防止键与其他应用冲突
         'key'    => true,                           // 节流规则 true为自动规则
         'visit_method' => ['GET', 'HEAD'],          // 要被限制的请求类型
         'visit_rate' => null,                       // 节流频率 null 表示不限制 eg: 10/m  20/h  300/d
         'visit_enable_show_rate_limit' => true,     // 在响应体中设置速率限制的头部信息
         'visit_fail_code' => 429,                   // 访问受限时返回的http状态码，当没有visit_fail_response时生效
-        'visit_fail_text' => 'Too Many Requests',   // 访问受限时访问的文本信息，当没有visit_fail_response时生效
+        'visit_fail_text' => 'Too Many Requests. Need wait {__WAIT__}s.',   // 访问受限时访问的文本信息，当没有visit_fail_response时生效
         'visit_fail_response' => null,              // 访问受限时的响应信息闭包回调
         'driver_name' => CounterFixed::class,       // 限流算法驱动
         'cache_drive' => Cache::class               // 缓存驱动
@@ -86,23 +88,25 @@ class Throttle {
      * @param Request $request
      * @return bool
      */
-    protected function allowRequest(Request $request): bool
+    protected function allowRequest(Request $request, array $config = []): bool
     {
+        $config = array_merge($this->config, $config);
         // 若请求类型不在限制内
-        if (!in_array($request->method(), $this->config['visit_method'])) {
+        if (!in_array($request->method(), $config['visit_method'])) {
             return true;
         }
 
-        $key = $this->getCacheKey($request);
+        $key = $this->getCacheKey($request, $config);
         if (null === $key) {
             return true;
         }
-        [$max_requests, $duration] = $this->parseRate($this->config['visit_rate']);
+
+        [$max_requests, $duration] = $this->parseRate($config['visit_rate']);
 
         $micronow = microtime(true);
         $now = (int) $micronow;
 
-        $this->driver_class = Container::make($this->config['driver_name'], []);
+        $this->driver_class = Container::make($config['driver_name'], []);
         if (!$this->driver_class instanceof ThrottleAbstract) {
             throw new \TypeError('The throttle driver must extends ' . ThrottleAbstract::class);
         }
@@ -113,18 +117,18 @@ class Throttle {
             $this->now = $now;
             $this->expire = $duration;
             $this->max_requests = $max_requests;
-            $this->remaining = $max_requests - $this->driver_class->getCurRequests();
+            $this->remaining = $max_requests - $this->driver_class->getCurRequests($key);
             return true;
         }
 
-        $this->wait_seconds = $this->driver_class->getWaitSeconds();
+        $this->wait_seconds = $this->driver_class->getWaitSeconds($key);
         return false;
     }
 
     /**
      * 处理限制访问
      * @param Request $request
-     * @param array $params
+     * @param array $params 预留未来主框架能实现： 路由中间件能外部默认传参接口
      * @return bool
      * @exception 
      */
@@ -133,11 +137,39 @@ class Throttle {
         if ($params) {
             $this->config = array_merge($this->config, $params);
         }
+        if(!empty($this->config['routes_rate'])){
+            foreach($this->config['routes_rate'] as $config){
+                if(!isset($config['maps']) || !is_array($config['maps']) || empty($config['maps'])){
+                  continue;  
+                }
+                $maps = array_map(function($route){
+                    return '/'.ltrim($route,'/');
+                }, array_values($config['maps']));
 
-        $allow = $this->allowRequest($request);
+                // Dev::dump($maps);
+                if( in_array($request->path(), $maps) ){
+                    $conf = $this->config;
+                    $conf['key'] = $request->path() . $request->getRealIp(true);
+                    if(isset($config['visit_method']))
+                        $conf['visit_method'] = $config['visit_method'];
+                    if(isset($config['visit_rate']))
+                        $conf['visit_rate'] = $config['visit_rate'];
+                    if(isset($config['visit_fail_response']))
+                        $conf['visit_fail_response'] = $config['visit_fail_response'];
+                    $allow = $this->allowRequest($request, $conf);
+                    unset($config);
+                    break;
+                }
+                unset($config, $maps);
+            }
+        }
+        if(!isset($allow)){
+            $allow = $this->allowRequest($request);
+        }
+
         if (!$allow) {
             // 访问受限
-            return $this->buildLimitException($this->wait_seconds, $request);
+            return $this->buildLimitException($this->wait_seconds, $request, $conf ?? []);
         }
 
         $response = $next($request);
@@ -146,7 +178,6 @@ class Throttle {
             // 将速率限制 headers 添加到响应中
             $response->withHeaders($this->getRateLimitHeaders());
         }
-
         return $response; 
     }
 
@@ -155,15 +186,17 @@ class Throttle {
      * @param Request $request
      * @return null|string
      */
-    protected function getCacheKey(Request $request): ?string
+    protected function getCacheKey(Request $request, array $config): ?string
     {
-        $key = $this->config['key'];
+        $config = array_merge($this->config, $config);
+
+        $key = $config['key'];
 
         if ($key instanceof \Closure) {
             $key = $key($this, $request);
         }
 
-        if ($key === null || $key === false || $this->config['visit_rate'] === null) {
+        if ($key === null || $key === false || $config['visit_rate'] === null) {
             // 关闭当前限制
             return null;
         }
@@ -177,7 +210,7 @@ class Throttle {
                 strtolower(trim($key))
             );
         }
-        return md5($this->config['prefix'] . $key . $this->config['driver_name']);
+        return md5($config['prefix'] . $key . $config['driver_name']);
     }
 
     /**
@@ -245,8 +278,8 @@ class Throttle {
      * @param Request $request
      * @return HttpResponseException
      */
-    public function buildLimitException(int $wait_seconds, Request $request){
-        $visitFail = $this->config['visit_fail_response'] ?? null;
+    public function buildLimitException(int $wait_seconds, Request $request, array $config = []){
+        $visitFail = $config['visit_fail_response'] ?? ($this->config['visit_fail_response'] ?? null);
         if ($visitFail instanceof \Closure) {
             $response = $visitFail($this, $request, $wait_seconds);
             if (!$response instanceof Response) {
@@ -254,7 +287,16 @@ class Throttle {
             }
         } else {
             $content = str_replace('__WAIT__', (string) $wait_seconds, $this->config['visit_fail_text']);
-            $response = new Response($this->config['visit_fail_code'], [], $content);
+            if($request->isAjax()){
+                $response = new Response(200, ['Content-Type' => 'application/json'], json_encode([
+                    'code' => $this->config['visit_fail_code'],
+                    'msg' => $content,
+                    'data' => null
+                ], JSON_UNESCAPED_UNICODE));
+            }else{
+                // $response = new Response($this->config['visit_fail_code'], [], $config['key'] .' -- '.$content . json_encode($_SESSION));
+                $response = new Response($this->config['visit_fail_code'], [], $content);
+            }
         }
         if ($this->config['visit_enable_show_rate_limit']) {
             $response->withHeaders(['Retry-After' => $wait_seconds]);

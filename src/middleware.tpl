@@ -23,7 +23,6 @@ class Throttle implements MiddlewareInterface
 {
     public function process(Request $request, callable $next, array $params = []):Response
     {
-        return (new ThrottleCore($params))->handle($request, $next);
+        return (new ThrottleCore)->handle($request, $next, $params);
     }
-    
 }

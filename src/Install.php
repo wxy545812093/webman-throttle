@@ -8,9 +8,7 @@ class Install
     /**
      * @var array
      */
-    protected static $pathRelation = array (
-        'config/plugin/vipkwd/webman-throttle' => 'config/plugin/vipkwd/webman-throttle',
-    );
+    protected static $pathRelation = array();
 
     /**
      * Install
@@ -76,16 +74,17 @@ class Install
     private static function putFile(string $targetFile, string $originFile){
         if (!is_file($targetFile)) {
             $code = file_get_contents(__DIR__.'/'.$originFile);
-            $code .= PHP_EOL. '//:'.md5($code);
+            $code .= PHP_EOL. '// 注意：任何时候您都应该保持下面的hash行处于本文件的最后一行位置且禁止修改';
+            $code .= PHP_EOL. '// :--'.md5($code).'--';
             file_put_contents($targetFile, $code);
         }   
     }
     private static function removeFile(string $targetFile, string $originFile){
         if(!is_file($targetFile)){
             $code = file($targetFile);
-            $code = array_pop($code);
+            $code = trim(array_pop($code));
             $hash = md5(file_get_contents(__DIR__.'/'.$originFile));
-            if(substr($code,3) == $hash){
+            if(substr($code,4) == "--{$hash}--"){
                 unlink($targetFile);
             }
         }   
