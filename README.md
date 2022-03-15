@@ -2,6 +2,10 @@
 
 A middleware plugins of webman framework
 
+## 警告/提示
+
+   __在任何项目中使用任何插件/中间件，当你进行了自定义配置、二开等操作/编辑后，再卸载相关插件/中间件，都有可能丢失数据或导致项目异常的风险。 本中间件为防止前述问题发生，当你执行 `composer remove vipkwd/webman-throttle` 删除本中间件时，卸载指令将检测相关文件指纹，只有指纹未发生变化(相对于原始库)时才会删除（即：指令不会删除你改动过的文件__
+
 ## 作用
 
 通过本中间件可限定用户在一段时间内的访问次数，可用于保护接口防爬防爆破的目的。
@@ -10,7 +14,7 @@ A middleware plugins of webman framework
 
 `composer require vipkwd/webman-throttle`
 
-安装后会自动为项目生成 config/throttle.php (**_注意:任何时候你都不应该修改最后一行的 hash 注释_**)配置文件，安装后组件不会自动启用，需要手动设置。
+安装后会自动为项目生成 `config/throttle.php` 配置文件，安装后组件不会自动启用，需要手动设置。
 
 ## 开启
 
@@ -241,9 +245,11 @@ Route::any('/v1/api/user/assets',[app\api\controller\User:class, 'assets'])->mid
 ```
 
 ## 更新日志：
-   v1.1.0: 增加路由自定义限流策略
-   
-   v1.0.1: 初始版本([webman](https://www.workerman.net/webman)下实现 [think-throttle](https://github.com/top-think/think-throttle) 的限流策略)
+v1.1.1: 优化中间件安装、卸载策略(实现`安全卸载`)
+
+v1.1.0: 增加路由自定义限流策略
+
+v1.0.1: 初始版本([webman](https://www.workerman.net/webman)下实现 [think-throttle](https://github.com/top-think/think-throttle) 的限流策略)
   
 
 
